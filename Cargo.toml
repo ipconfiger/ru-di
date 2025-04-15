@@ -1,0 +1,13 @@
+[package]
+name = "ru-di"
+version = "0.1.0"
+edition = "2021"
+authors = ["Alexander.Li <superpowerlee@gmail.com>"]
+description = "A simple and lightweight dependency injection container for Rust"
+license = "MIT"
+repository = "https://github.com/ipconfiger/ru-di"
+documentation = "https://docs.rs/ru-di"
+keywords = ["dependency-injection", "di", "container", "ioc"]
+categories = ["development-tools"]
+
+[dependencies]
