@@ -20,7 +20,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ru-di = "0.1"
+ru-di = "0.1.1"
 ```
 
 ## Usage

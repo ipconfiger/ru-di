@@ -81,7 +81,7 @@ impl Di {
         di._register(factory);
     }
 
-     fn _get<T: 'static>(&self) -> Result<T, Box<dyn std::error::Error>> {
+     pub fn get_inner<T: 'static>(&self) -> Result<T, Box<dyn std::error::Error>> {
         let type_id = std::any::TypeId::of::<T>();
         let providers = self.providers.read().unwrap();
         let provider = providers.get(&type_id).ok_or("Provider not found")?;
@@ -93,7 +93,7 @@ impl Di {
     }
     pub fn get<T: 'static>() -> Result<T, Box<dyn std::error::Error>> {
         let di = Di::get_instance().lock().unwrap();
-        di._get()
+        di.get_inner()
     }
     
     fn _get_single<T: Any + Send + Sync + 'static>(&self) -> Option<SingleRef<T>> {
@@ -163,7 +163,7 @@ mod tests {
         Di::register_single(Configuration{port: 8080});
         
         Di::register::<AppService, _>(|di| {
-            let db = di._get::<Database>().unwrap();
+            let db = di.get_inner::<Database>().unwrap();
             AppService{ db:db.clone()}
         });
         println!("regist app done");

@@ -1,6 +1,6 @@
 [package]
 name = "ru-di"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Alexander.Li <superpowerlee@gmail.com>"]
 description = "A simple and lightweight dependency injection container for Rust"
