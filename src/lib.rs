@@ -2,14 +2,18 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock, RwLockWriteGuard, RwLockReadGuard};
 use std::ops::{Deref, DerefMut};
+use tokio::sync::{Mutex as TokioMutex, RwLock as TokioRwLock};
 
 static INSTANCE: OnceLock<Mutex<Di>> = OnceLock::new();
 
 type ThreadSafeAny = Arc<RwLock<dyn Any + Send + Sync + 'static>>;
 
+type AsyncSaftAny = Arc<TokioRwLock<dyn Any + Send + Sync + 'static>>;
+
 pub struct Di {
     providers: RwLock<HashMap<TypeId, Arc<dyn Provider>>>,
     single_map: HashMap<TypeId, ThreadSafeAny>,
+    async_map: HashMap<TypeId, AsyncSaftAny>,
 }
 
 pub struct SingleRef<T> {
@@ -34,11 +38,36 @@ impl<T> Clone for SingleRef<T> {
     }
 }
 
+
+pub struct SingleAsyncRef<T> {
+    value: Arc<TokioRwLock<T>>,
+}
+
+impl<T> SingleAsyncRef<T> {
+    pub async fn get(&self) -> tokio::sync::RwLockReadGuard<'_, T> {
+        self.value.read().await
+    }
+
+    pub async fn get_mut(&mut self) -> tokio::sync::RwLockWriteGuard<'_, T> {
+        self.value.write().await
+    }
+}
+
+impl<T> Clone for SingleAsyncRef<T> {
+    fn clone(&self) -> Self {
+        SingleAsyncRef {
+            value: self.value.clone(),
+        }
+    }
+}
+
+
 impl Di {
     fn get_instance() -> &'static Mutex<Di> {
         INSTANCE.get_or_init(|| Mutex::new(Di{
             providers: RwLock::new(HashMap::new()),
             single_map: HashMap::new(),
+            async_map: HashMap::new(),
         }))
     }
     
@@ -50,6 +79,15 @@ impl Di {
         let any = Arc::new(RwLock::new(instance));
         self.single_map.insert(type_id, any);
     }
+
+    fn _register_async_single<T>(&mut self, instance: T)
+    where
+        T: 'static + Send + Sync,
+    {
+        let type_id = std::any::TypeId::of::<T>();
+        let any = Arc::new(TokioRwLock::new(instance));
+        self.async_map.insert(type_id, any);
+    }
     
     pub fn register_single<T>(instance: T)
     where
@@ -59,6 +97,14 @@ impl Di {
         di._register_single(instance);
     }
 
+    pub fn register_async_single<T>(instance: T)
+    where
+        T: 'static + Send + Sync,
+    {
+        let mut di = Di::get_instance().lock().unwrap();
+        di._register_async_single(instance);
+    }
+    
     fn _register<T, F>(&self, factory: F)
     where
         T: 'static + Send + Sync,
@@ -72,6 +118,7 @@ impl Di {
         let mut providers = self.providers.write().unwrap();
         providers.insert(type_id, Arc::new(provider));
     }
+    
     pub fn register<T, F>(factory: F)
     where
         T: 'static + Send + Sync,
@@ -108,6 +155,22 @@ impl Di {
     pub fn get_single<T: Any + Send + Sync + 'static>() -> Option<SingleRef<T>> {
         let di = Di::get_instance().lock().unwrap();
         di._get_single::<T>()
+    }
+
+
+    fn _get_async_single<T: Any + Send + Sync + 'static>(&self) -> Option<SingleAsyncRef<T>> {
+        let type_id = std::any::TypeId::of::<T>();
+        let any = self.async_map.get(&type_id)?;
+        let value = unsafe {
+            let ptr = Arc::into_raw(any.clone());
+            Arc::from_raw(ptr as *const TokioRwLock<T>)
+        };
+        Some(SingleAsyncRef { value })
+    }
+    
+    pub fn get_async_single<T: Any + Send + Sync + 'static>() -> Option<SingleAsyncRef<T>> {
+        let di = Di::get_instance().lock().unwrap();
+        di._get_async_single::<T>()
     }
 }
 
