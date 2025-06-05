@@ -78,13 +78,13 @@ impl TkDi {
     async fn _register<T, F>(&self, factory: F)
     where
         T: 'static + Send + Sync,
-        F: Fn(&TkDi) -> T + Send + Sync + 'static,
+        F: Fn() -> T + Send + Sync + 'static,
     {
         let provider = FactoryProvider {
             factory,
             _marker: std::marker::PhantomData,
         };
-        let type_id = std::any::TypeId::of::<T>();
+        let type_id = TypeId::of::<T>();
         let mut providers = self.providers.write().await;
         providers.insert(type_id, Arc::new(provider));
     }
@@ -92,17 +92,18 @@ impl TkDi {
     pub async fn register<T, F>(factory: F)
     where
         T: 'static + Send + Sync,
-        F: Fn(&TkDi) -> T + Send + Sync + 'static,
+        F: Fn() -> T + Send + Sync + 'static,
     {
         let di = TkDi::get_instance().lock().await;
-        di._register(factory);
+        //println!("reg got di instance");
+        di._register(factory).await;
     }
     
     pub async fn get_inner<T: 'static>(&self) -> Result<T, Box<dyn std::error::Error>> {
-        let type_id = std::any::TypeId::of::<T>();
+        let type_id = TypeId::of::<T>();
         let providers = self.providers.read().await;
         let provider = providers.get(&type_id).ok_or("Provider not found")?;
-        let any = provider.provide(self);
+        let any = provider.provide();
         // 从 Box<dyn Any> 中提取 Arc<T>
         let t = any.downcast::<T>().map_err(|_| "Downcast failed")?;
         Ok(*t)
@@ -238,7 +239,7 @@ trait Provider: Send + Sync {
 }
 
 trait TkProvider: Send + Sync {
-    fn provide(&self, di: &TkDi) -> Box<dyn Any>;
+    fn provide(&self) -> Box<dyn Any>;
 }
 
 struct FactoryProvider<F, T> {
@@ -259,11 +260,11 @@ where
 
 impl<F, T> TkProvider for FactoryProvider<F, T>
 where
-    F: Fn(&TkDi) -> T + Send + Sync + 'static,
+    F: Fn() -> T + Send + Sync + 'static,
     T: 'static + Send + Sync,
 {
-    fn provide(&self, di: &TkDi) -> Box<dyn Any> {
-        Box::new((self.factory)(di))
+    fn provide(&self) -> Box<dyn Any> {
+        Box::new((self.factory)())
     }
 }
 
@@ -296,7 +297,7 @@ mod tests {
 
     #[tokio::test]
     async fn async_test() {
-        TkDi::register::<Database, _>(|_| {
+        TkDi::register(|| {
             Database{port: 3306}
         }).await;
         println!("regist database done");
